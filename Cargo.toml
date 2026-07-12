@@ -1,0 +1,46 @@
+[package]
+name = "fr-claw"
+version = "0.1.0"
+edition = "2021"
+description = "FrClaw —— 终端 AI 助手 / AI 编程伙伴（Rust 重写自 fr-cli，对标 OpenClaw 生态）"
+license = "MIT"
+
+[[bin]]
+name = "fr"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+async-stream = "0.3"
+async-trait = "0.1"
+axum = { version = "0.7", features = ["macros"] }
+base64 = "0.22"
+bytes = "1"
+chrono = { version = "0.4", features = ["serde", "clock"] }
+clap = { version = "4", features = ["derive"] }
+dirs = "5"
+futures = "0.3"
+futures-util = "0.3"
+hmac = "0.12"
+owo-colors = "4"
+rand = "0.8"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls", "blocking", "multipart"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+rustyline = { version = "14", features = ["with-file-history"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+sha2 = "0.10"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4"] }
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

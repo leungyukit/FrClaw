@@ -1,0 +1,38 @@
+# Rust / Cargo
+/target/
+**/*.rs.bk
+Cargo.lock.bak
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# 本地环境 / 临时
+.env
+.env.local
+*.log
+*.tmp
+
+# 用户数据 / 运行时产物（不进版本控制）
+/data/
+/tmp/
+/storage/
+*.m4a
+*.aiff
+*.wav
+*.mp3
+*.html
+!assets/**/*.html
+*.pptx
+!assets/**/*.pptx
+
+# OS
+Thumbs.db
+desktop.ini
+
+# 大文件 / 二进制
+*.bin
