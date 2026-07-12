@@ -4,6 +4,27 @@ version = "0.1.0"
 edition = "2021"
 description = "FrClaw —— 终端 AI 助手 / AI 编程伙伴（Rust 重写自 fr-cli，对标 OpenClaw 生态）"
 license = "MIT"
+repository = "https://github.com/leungyukit/FrClaw"
+homepage = "https://github.com/leungyukit/FrClaw"
+documentation = "https://github.com/leungyukit/FrClaw#readme"
+readme = "README.md"
+keywords = [
+    "ai",
+    "agent",
+    "cli",
+    "terminal",
+    "openclaw",
+    "chatgpt",
+    "anthropic",
+    "rag",
+    "mcp",
+    "assistant",
+]
+categories = [
+    "command-line-utilities",
+    "development-tools",
+    "api-bindings",
+]
 
 [[bin]]
 name = "fr"
