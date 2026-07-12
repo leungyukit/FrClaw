@@ -14,6 +14,8 @@ use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+pub use crate::repl::config_cmd::config_cmd;
+
 pub const HELP_TEXT: &str = r#"
 fr-cli 内置命令
 ================
@@ -26,6 +28,7 @@ fr-cli 内置命令
   /see [n]                预览最近 n 条消息（默认 5）
 
 模型与配置
+  /config model           交互式添加/配置 LLM provider
   /model [别名]           列出或切换 provider
   /providers              列出所有 provider
   /key <别名> <key>       设置 API key
@@ -174,7 +177,10 @@ pub async fn clear() -> Result<CmdOutcome> {
 // ----------------- 会话 -----------------
 
 pub async fn new_session(ctx: &AppContext, args: &[&str]) -> Result<CmdOutcome> {
-    let alias = ctx.chain.primary_alias().unwrap_or("default");
+    let alias = {
+        let chain = ctx.chain.read().unwrap();
+        chain.primary_alias().unwrap_or("default").to_string()
+    };
     let name = args.first().copied().unwrap_or("default").to_string();
     let models = ctx.models.lock().unwrap().clone();
     let settings = ctx.settings.lock().unwrap().clone();
@@ -251,6 +257,13 @@ pub async fn model(ctx: &AppContext, args: &[&str]) -> Result<CmdOutcome> {
     let models = ctx.models.lock().unwrap();
     if args.is_empty() {
         println!();
+        if models.providers.is_empty() {
+            println!("当前未配置任何 provider。");
+            println!("  1. 编辑 ~/.fr_cli/models.yaml 添加 provider");
+            println!("  2. 重启 frClaw 或使用 /model <alias> 切换");
+            println!();
+            return Ok(CmdOutcome::Continue);
+        }
         println!("可用 providers（* = 当前 default, ! = backup）：");
         let def = models.default_provider_name();
         let bk = models.backup_provider_name();

@@ -45,7 +45,7 @@ impl HeartbeatRunner {
 
         // 3. 调 LLM：限制 1 个 step + 限制 tool calls
         let tools = crate::tools::ToolRegistry::definitions();
-        let provider = match self.ctx.chain.primary() {
+        let provider = match self.ctx.chain.read().unwrap().primary() {
             Some(p) => p.clone(),
             None => {
                 return Ok(RunRecord {

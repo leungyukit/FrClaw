@@ -38,13 +38,15 @@ pub async fn post_chat(
     if message.is_empty() {
         return Err(axum::http::StatusCode::BAD_REQUEST);
     }
-    let stream = stream_chat(state.ctx.clone(), message);
+    let provider = state.ctx.chain.read().unwrap().primary().cloned();
+    let stream = stream_chat(state.ctx.clone(), message, provider);
     Ok(Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15))))
 }
 
 fn stream_chat(
     ctx: Arc<AppContext>,
     message: String,
+    provider: Option<Arc<dyn crate::llm::provider::LlmProvider>>,
 ) -> impl Stream<Item = Result<Event, Infallible>> {
     async_stream::stream! {
         ctx.session.lock().unwrap().push_user(message.clone());
@@ -67,8 +69,8 @@ fn stream_chat(
             (messages, alias, max_tokens, temperature, thinking)
         };
 
-        let provider = match ctx.chain.primary() {
-            Some(p) => p.clone(),
+        let provider = match provider {
+            Some(p) => p,
             None => {
                 yield Ok::<_, Infallible>(Event::default().event("error").data(
                     json!({ "message": "no primary provider configured" }).to_string()

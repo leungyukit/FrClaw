@@ -1,6 +1,6 @@
 [package]
 name = "fr-claw"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "FrClaw —— 终端 AI 助手 / AI 编程伙伴（Rust 重写自 fr-cli，对标 OpenClaw 生态）"
 license = "MIT"
@@ -52,6 +52,9 @@ thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

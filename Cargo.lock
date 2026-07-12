@@ -529,7 +529,7 @@ dependencies = [
 
 [[package]]
 name = "fr-claw"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -543,6 +543,7 @@ dependencies = [
  "futures",
  "futures-util",
  "hmac",
+ "libc",
  "owo-colors",
  "rand 0.8.6",
  "regex",

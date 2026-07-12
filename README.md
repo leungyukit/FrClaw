@@ -1222,10 +1222,10 @@ cargo build --release
 ./target/release/fr --logo
 
 # 设置 API key（写入 ~/.fr_cli/keys.json，权限 0600）
-fr> /key zhipu sk-xxxxxxxxxxxxxxx
+fr> /key deepseek sk-xxxxxxxxxxxxxxx
 
 # 或走 env
-ZHIPU_API_KEY=sk-xxx ./target/release/fr
+DEEPSEEK_API_KEY=sk-xxx ./target/release/fr
 
 # 一次性提问（one-shot）
 ./target/release/fr -p "把这句话翻译成英文：FrClaw"
@@ -1244,22 +1244,23 @@ fr> 帮我研究下当前目录下所有 .rs 文件并生成一份 module 概览
 
 ```yaml
 providers:
-  zhipu:
-    name: 智谱 GLM
-    model: glm-4-flash
-    protocol: openai
-    base_url: https://open.bigmodel.cn/api/paas/v4
-    api_key_env: ZHIPU_API_KEY
-    is_default: true
   deepseek:
     name: DeepSeek
     model: deepseek-chat
     protocol: openai
     base_url: https://api.deepseek.com/v1
+    api_key_env: DEEPSEEK_API_KEY
+    is_default: true
+  openai:
+    name: OpenAI
+    model: gpt-4o-mini
+    protocol: openai
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
     is_backup: true
 settings:
-  default_provider: zhipu
-  backup_provider: deepseek
+  default_provider: deepseek
+  backup_provider: openai
   history_window: 5
   lang: zh
 ```

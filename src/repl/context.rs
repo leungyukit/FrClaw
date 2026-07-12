@@ -25,13 +25,13 @@ use crate::tools::rag::RagContext;
 use crate::tools::subagent::SubAgentRegistry;
 use crate::tools::worktree::WorktreeContext;
 use crate::tools::HeartbeatToolContext;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 pub struct AppContext {
     pub models: Arc<Mutex<ModelsFile>>,
     pub settings: Arc<Mutex<Settings>>,
     pub session: Arc<Mutex<ChatSession>>,
-    pub chain: Arc<FallbackChain>,
+    pub chain: Arc<RwLock<FallbackChain>>,
     pub cwd: Arc<Mutex<std::path::PathBuf>>,
 
     pub permission: Arc<Mutex<PermissionGate>>,
@@ -115,7 +115,7 @@ impl AppContext {
             models: Arc::new(Mutex::new(models)),
             settings: Arc::new(Mutex::new(settings)),
             session: Arc::new(Mutex::new(session)),
-            chain: Arc::new(chain),
+            chain: Arc::new(RwLock::new(chain)),
             cwd: Arc::new(Mutex::new(cwd)),
             permission: Arc::new(Mutex::new(PermissionGate::new(autonomous))),
             plan_state: Arc::new(Mutex::new(PlanModeState::default())),

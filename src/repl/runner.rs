@@ -33,13 +33,14 @@ pub async fn run(ctx: std::sync::Arc<AppContext>, cfg: ReplConfig) -> Result<()>
     println!();
     banner::print_banner();
 
-    if let Some(alias) = ctx.chain.primary_alias() {
-        let p = ctx.chain.primary().expect("alias implies provider");
+    let chain = ctx.chain.read().unwrap();
+    if let Some(alias) = chain.primary_alias() {
+        let p = chain.primary().expect("alias implies provider");
         banner::print_greeting(alias, p.model());
     }
-    if ctx.chain.providers().is_empty() {
-        eprintln!("⚠️  当前没有可用 provider — 设置 API key 后再启动，例如：");
-        eprintln!("    /key zhipu sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+    if chain.providers().is_empty() {
+        eprintln!("⚠️  当前没有可用 provider — 请先编辑 ~/.fr_cli/models.yaml 添加 provider，");
+        eprintln!("    或启动时指定 --model <alias>。示例见 README.md。");
     } else {
         println!(
             "  输入 /help 看可用命令。直接输入文字 = 与 AI 对话。\n  Ctrl-D 或 /exit 退出。"

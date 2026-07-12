@@ -29,9 +29,10 @@ pub fn bootstrap(args: &Args) -> Result<std::sync::Arc<AppContext>> {
         None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
     };
 
-    let default_alias = models
-        .default_provider_name()
-        .unwrap_or_else(|| "default".into());
+    let default_alias = models.default_provider_name().unwrap_or_default();
+    if default_alias.is_empty() {
+        eprintln!("⚠️  未配置任何 LLM provider；请先编辑 ~/.fr_cli/models.yaml 或执行 /model <alias> 切换。");
+    }
     let session = ChatSession::new("default", &models, &settings, default_alias.clone());
     let chain = FallbackChain::from_models(&models)?;
 
@@ -144,6 +145,11 @@ pub async fn run_one_shot(args: &Args) -> Result<i32> {
     let ctx = bootstrap(args)?;
     ctx.mcp.connect_all().await;
     // 一次性模式 heartbeat 不需要后台跑（一次性退出）
+
+    if ctx.chain.read().unwrap().providers().is_empty() {
+        anyhow::bail!("未配置任何可用 LLM provider，请先编辑 ~/.fr_cli/models.yaml 并设置 default_provider");
+    }
+
     let prompt = match (args.prompt.clone(), args.file.clone()) {
         (Some(p), _) => p,
         (None, Some(path)) => std::fs::read_to_string(&path)?,
@@ -190,7 +196,7 @@ pub async fn run_one_shot(args: &Args) -> Result<i32> {
         force_non_stream: true,
     };
 
-    let (used_alias, resp) = ctx.chain.chat_with_fallback(&model_alias, req).await?;
+    let (used_alias, resp) = ctx.chain.read().unwrap().chat_with_fallback(&model_alias, req).await?;
     if !used_alias.is_empty() && used_alias != model_alias {
         crate::ui::colors::print_info(&format!("⚠️  已自动降级到 provider `{used_alias}`"));
     }

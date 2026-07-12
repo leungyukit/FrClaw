@@ -40,6 +40,7 @@ pub async fn dispatch(line: &str, ctx: &AppContext) -> Result<CmdOutcome> {
         "load" => commands::load(ctx, &rest_args).await,
         "list_sessions" | "ls_s" => commands::list_sessions(ctx).await,
         "see" | "messages" => commands::see(ctx, &rest_args).await,
+        "config" => commands::config_cmd(ctx, &rest_args).await,
         "model" | "use" => commands::model(ctx, &rest_args).await,
         "providers" => commands::providers(ctx).await,
         "key" => commands::key(ctx, &rest_args).await,
@@ -257,7 +258,8 @@ pub async fn handle_user_input(text: &str, ctx: &AppContext) -> Result<()> {
     tools.extend(mcp_defs);
 
     // 4) 找到对应 provider（fallback chain 由调用方在外面）
-    let (used_alias, primary) = match pick_primary(&ctx.chain, &model_alias) {
+    let chain_guard = ctx.chain.read().unwrap();
+    let (used_alias, primary) = match pick_primary(&*chain_guard, &model_alias) {
         Ok(v) => v,
         Err(e) => {
             colors::print_error(&format!("没有可用 provider: {e}"));

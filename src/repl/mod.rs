@@ -6,5 +6,6 @@
 
 pub mod command;
 pub mod commands;
+pub mod config_cmd;
 pub mod context;
 pub mod runner;

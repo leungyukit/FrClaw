@@ -1,23 +1,24 @@
 //! `models.yaml` 解析。
 //!
 //! 文件 schema 与原 fr-cli 的 `models.yaml` 兼容——
-//! 字段名略做简化（payload 不再依赖 `client` 枚举值）：
+//! 字段名略做简化（payload 不再依赖 `client` 枚举值）。
+//! 项目默认不内置任何 provider，首次启动会生成空模板，用户需自行配置：
 //!
 //! ```yaml
 //! providers:
-//!   zhipu:
-//!     name: "智谱"
-//!     model: "glm-4-flash"
+//!   deepseek:
+//!     name: "DeepSeek"
+//!     model: "deepseek-chat"
 //!     protocol: openai    # 协议：openai / anthropic（仅 openai 落地）
-//!     base_url: "https://open.bigmodel.cn/api/coding/paas/v4"
-//!     api_key_env: "ZHIPU_API_KEY"
+//!     base_url: "https://api.deepseek.com/v1"
+//!     api_key_env: "DEEPSEEK_API_KEY"
 //!     max_tokens: 8192
 //!     temperature: 0.7
 //!     is_default: true
-//!     is_backup: true
+//!     is_backup: false
 //! settings:
-//!   default_provider: "zhipu"
-//!   backup_provider: "deepseek"
+//!   default_provider: "deepseek"
+//!   backup_provider: ~
 //!   history_window: 5
 //! ```
 
@@ -84,111 +85,14 @@ fn default_max_tokens_limit() -> u32 {
     8192
 }
 
-/// 内置的兜底 providers——首次启动 / `~/.fr_cli/models.yaml` 缺失时使用。
+/// 内置的兜底配置——首次启动 / `~/.fr_cli/models.yaml` 缺失时使用。
+/// 默认不携带任何 provider，强制用户显式配置。
 pub fn builtin_default() -> ModelsFile {
-    let mut providers = BTreeMap::new();
-
-    providers.insert(
-        "zhipu".into(),
-        ProviderConfig {
-            name: "智谱 GLM".into(),
-            model: "glm-4-flash".into(),
-            protocol: "openai".into(),
-            base_url: "https://open.bigmodel.cn/api/paas/v4".into(),
-            api_key_env: Some("ZHIPU_API_KEY".into()),
-            max_tokens: Some(8192),
-            temperature: Some(0.7),
-            is_default: true,
-            is_backup: false,
-            extra_headers: BTreeMap::new(),
-        },
-    );
-
-    providers.insert(
-        "deepseek".into(),
-        ProviderConfig {
-            name: "DeepSeek".into(),
-            model: "deepseek-chat".into(),
-            protocol: "openai".into(),
-            base_url: "https://api.deepseek.com/v1".into(),
-            api_key_env: Some("DEEPSEEK_API_KEY".into()),
-            max_tokens: Some(8192),
-            temperature: Some(0.7),
-            is_default: false,
-            is_backup: true,
-            extra_headers: BTreeMap::new(),
-        },
-    );
-
-    providers.insert(
-        "openai".into(),
-        ProviderConfig {
-            name: "OpenAI".into(),
-            model: "gpt-4o-mini".into(),
-            protocol: "openai".into(),
-            base_url: "https://api.openai.com/v1".into(),
-            api_key_env: Some("OPENAI_API_KEY".into()),
-            max_tokens: Some(8192),
-            temperature: Some(0.7),
-            is_default: false,
-            is_backup: false,
-            extra_headers: BTreeMap::new(),
-        },
-    );
-
-    providers.insert(
-        "anthropic".into(),
-        ProviderConfig {
-            name: "Anthropic Claude (via OpenAI-compat proxy)".into(),
-            model: "claude-sonnet-4-5".into(),
-            protocol: "openai".into(),
-            base_url: "https://api.anthropic.com/v1".into(),
-            api_key_env: Some("ANTHROPIC_API_KEY".into()),
-            max_tokens: Some(8192),
-            temperature: Some(0.7),
-            is_default: false,
-            is_backup: false,
-            extra_headers: BTreeMap::new(),
-        },
-    );
-
-    providers.insert(
-        "moonshot".into(),
-        ProviderConfig {
-            name: "Moonshot Kimi".into(),
-            model: "moonshot-v1-8k".into(),
-            protocol: "openai".into(),
-            base_url: "https://api.moonshot.cn/v1".into(),
-            api_key_env: Some("MOONSHOT_API_KEY".into()),
-            max_tokens: Some(8192),
-            temperature: Some(0.7),
-            is_default: false,
-            is_backup: false,
-            extra_headers: BTreeMap::new(),
-        },
-    );
-
-    providers.insert(
-        "ollama".into(),
-        ProviderConfig {
-            name: "Ollama (本地)".into(),
-            model: "qwen2.5:7b".into(),
-            protocol: "openai".into(),
-            base_url: "http://127.0.0.1:11434/v1".into(),
-            api_key_env: Some("OLLAMA_API_KEY".into()),
-            max_tokens: Some(8192),
-            temperature: Some(0.7),
-            is_default: false,
-            is_backup: false,
-            extra_headers: BTreeMap::new(),
-        },
-    );
-
     ModelsFile {
-        providers,
+        providers: BTreeMap::new(),
         settings: GlobalSettings {
-            default_provider: Some("zhipu".into()),
-            backup_provider: Some("deepseek".into()),
+            default_provider: None,
+            backup_provider: None,
             history_window: 5,
             lang: "zh".into(),
             max_tokens_limit: 8192,
