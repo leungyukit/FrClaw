@@ -33,20 +33,22 @@ pub async fn run(ctx: std::sync::Arc<AppContext>, cfg: ReplConfig) -> Result<()>
     println!();
     banner::print_banner();
 
-    let chain = ctx.chain.read().unwrap();
-    if let Some(alias) = chain.primary_alias() {
-        let p = chain.primary().expect("alias implies provider");
-        banner::print_greeting(alias, p.model());
+    {
+        let chain = ctx.chain.read().unwrap();
+        if let Some(alias) = chain.primary_alias() {
+            let p = chain.primary().expect("alias implies provider");
+            banner::print_greeting(alias, p.model());
+        }
+        if chain.providers().is_empty() {
+            eprintln!("⚠️  当前没有可用 provider — 请先编辑 ~/.fr_cli/models.yaml 添加 provider，");
+            eprintln!("    或启动时指定 --model <alias>。示例见 README.md。");
+        } else {
+            println!(
+                "  输入 /help 看可用命令。直接输入文字 = 与 AI 对话。\n  Ctrl-D 或 /exit 退出。"
+            );
+        }
+        println!();
     }
-    if chain.providers().is_empty() {
-        eprintln!("⚠️  当前没有可用 provider — 请先编辑 ~/.fr_cli/models.yaml 添加 provider，");
-        eprintln!("    或启动时指定 --model <alias>。示例见 README.md。");
-    } else {
-        println!(
-            "  输入 /help 看可用命令。直接输入文字 = 与 AI 对话。\n  Ctrl-D 或 /exit 退出。"
-        );
-    }
-    println!();
 
     let cfg_rl = RlBuilder::new()
         .auto_add_history(true)

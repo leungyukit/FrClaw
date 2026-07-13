@@ -72,7 +72,7 @@ pub struct AppContext {
     pub heartbeat_tools: Arc<HeartbeatToolContext>,
 
     /// Round 16 ─ 多通讯通道（飞书 / 钉钉 / 企微 / 通用 Webhook）
-    pub channels: crate::channels::ChannelManager,
+    pub channels: Arc<std::sync::RwLock<crate::channels::ChannelManager>>,
 }
 
 impl AppContext {
@@ -133,7 +133,7 @@ impl AppContext {
             soul,
             heartbeat,
             heartbeat_tools,
-            channels: crate::channels::ChannelManager::from_file(),
+            channels: Arc::new(std::sync::RwLock::new(crate::channels::ChannelManager::from_file())),
         }
     }
 }

@@ -43,17 +43,24 @@ impl HeartbeatRunner {
         // 2. 拼 system prompt
         let sys_prompt = build_system_prompt(&policy, &soul);
 
+        // 调工具可能用到通道，先快照一份 ChannelManager，避免 RwLockReadGuard 跨 await
+        let channels_snapshot = self.ctx.channels.read().unwrap().clone();
+
         // 3. 调 LLM：限制 1 个 step + 限制 tool calls
         let tools = crate::tools::ToolRegistry::definitions();
-        let provider = match self.ctx.chain.read().unwrap().primary() {
-            Some(p) => p.clone(),
-            None => {
-                return Ok(RunRecord {
-                    ran_at: started,
-                    status: "failed".to_string(),
-                    summary: "no primary provider".to_string(),
-                    tools_called: vec![],
-                });
+        // 先把 provider clone 出来，释放 chain 读锁，避免跨 .await 持有 RwLockReadGuard
+        let provider = {
+            let chain = self.ctx.chain.read().unwrap();
+            match chain.primary() {
+                Some(p) => p.clone(),
+                None => {
+                    return Ok(RunRecord {
+                        ran_at: started,
+                        status: "failed".to_string(),
+                        summary: "no primary provider".to_string(),
+                        tools_called: vec![],
+                    });
+                }
             }
         };
 
@@ -89,7 +96,7 @@ impl HeartbeatRunner {
                         Some(&self.ctx.soul),
                         Some(&self.ctx.heartbeat_tools),
                         Some(&self.ctx.mcp),
-                        &self.ctx.channels,
+                        &channels_snapshot,
                     )
                     .await;
                     if let Err(e) = r {

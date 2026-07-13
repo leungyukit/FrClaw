@@ -28,6 +28,7 @@ impl OpenAiCompatProvider {
         let alias = alias.into();
         let api_key = keys::resolve(cfg.api_key_env.as_deref(), &alias);
         let client = ClientBuilder::new()
+            .connect_timeout(Duration::from_secs(15))
             .timeout(Duration::from_secs(180))
             .build()
             .map_err(|e| Error::Other(format!("build http client: {e}")))?;

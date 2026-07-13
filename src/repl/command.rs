@@ -258,12 +258,15 @@ pub async fn handle_user_input(text: &str, ctx: &AppContext) -> Result<()> {
     tools.extend(mcp_defs);
 
     // 4) 找到对应 provider（fallback chain 由调用方在外面）
-    let chain_guard = ctx.chain.read().unwrap();
-    let (used_alias, primary) = match pick_primary(&*chain_guard, &model_alias) {
-        Ok(v) => v,
-        Err(e) => {
-            colors::print_error(&format!("没有可用 provider: {e}"));
-            return Ok(());
+    // 先 clone provider 出来，避免 chain 读锁跨 await
+    let (used_alias, primary) = {
+        let chain_guard = ctx.chain.read().unwrap();
+        match pick_primary(&*chain_guard, &model_alias) {
+            Ok(v) => v,
+            Err(e) => {
+                colors::print_error(&format!("没有可用 provider: {e}"));
+                return Ok(());
+            }
         }
     };
     if used_alias != model_alias {

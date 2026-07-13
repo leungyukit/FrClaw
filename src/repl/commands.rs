@@ -28,7 +28,7 @@ fr-cli 内置命令
   /see [n]                预览最近 n 条消息（默认 5）
 
 模型与配置
-  /config model           交互式添加/配置 LLM provider
+  /config                 进入交互式配置菜单（模型/通道/思考模式/语言/自治/限制）
   /model [别名]           列出或切换 provider
   /providers              列出所有 provider
   /key <别名> <key>       设置 API key
@@ -3025,14 +3025,14 @@ pub async fn channels_cmd(ctx: &AppContext, args: &[&str]) -> Result<CmdOutcome>
     let sub = args.first().copied().unwrap_or("list");
     match sub {
         "list" | "ls" | "" => {
-            let names = ctx.channels.list();
+            let names = ctx.channels.read().unwrap().list();
             println!();
             if names.is_empty() {
                 println!("Channels: (空) — /channels add 配一个");
             } else {
                 println!("Channels（{} 个）：", names.len());
                 for n in &names {
-                    let ch = ctx.channels.get(n).unwrap();
+                    let ch = ctx.channels.read().unwrap().get(n).unwrap();
                     println!("  • {:<24}  kind={:?}", n, ch.kind());
                 }
             }
@@ -3075,6 +3075,7 @@ pub async fn channels_cmd(ctx: &AppContext, args: &[&str]) -> Result<CmdOutcome>
                 colors::print_error(&format!("保存失败: {e}"));
                 return Ok(CmdOutcome::Continue);
             }
+            *ctx.channels.write().unwrap() = crate::channels::ChannelManager::from_config(&cfg);
             colors::print_info(&format!(
                 "✓ 已添加 (dry_run=true) — 调 /channels test <name> <text> 试发，调 /channels toggle <name> 关 dry-run"
             ));
@@ -3093,6 +3094,7 @@ pub async fn channels_cmd(ctx: &AppContext, args: &[&str]) -> Result<CmdOutcome>
                 return Ok(CmdOutcome::Continue);
             }
             let _ = cfg.save();
+            *ctx.channels.write().unwrap() = crate::channels::ChannelManager::from_config(&cfg);
             colors::print_info(&format!("✓ 删除 {name}"));
         }
         "toggle" => {
@@ -3118,6 +3120,7 @@ pub async fn channels_cmd(ctx: &AppContext, args: &[&str]) -> Result<CmdOutcome>
                 return Ok(CmdOutcome::Continue);
             }
             let _ = cfg.save();
+            *ctx.channels.write().unwrap() = crate::channels::ChannelManager::from_config(&cfg);
         }
         "test" | "send" => {
             // /channels test <name> <text...>
@@ -3128,7 +3131,8 @@ pub async fn channels_cmd(ctx: &AppContext, args: &[&str]) -> Result<CmdOutcome>
             let name = args[1];
             let text = args[2..].join(" ");
             let msg = OutboundMessage::text(&text);
-            match ctx.channels.send(name, &msg).await {
+            let channels = ctx.channels.read().unwrap().clone();
+            match channels.send(name, &msg).await {
                 Ok(r) if r.ok => {
                     colors::print_info(&format!(
                         "✓ {} 发成功：{}",
@@ -3154,7 +3158,8 @@ pub async fn channels_cmd(ctx: &AppContext, args: &[&str]) -> Result<CmdOutcome>
             }
             let text = args[1..].join(" ");
             let msg = OutboundMessage::text(&text);
-            let results = ctx.channels.broadcast(&msg).await;
+            let channels = ctx.channels.read().unwrap().clone();
+            let results = channels.broadcast(&msg).await;
             for r in results {
                 if r.ok {
                     colors::print_info(&format!("✓ {} 成功", r.channel));
@@ -3211,6 +3216,7 @@ pub async fn channels_cmd(ctx: &AppContext, args: &[&str]) -> Result<CmdOutcome>
                 ],
             };
             sample.save().map_err(|e| anyhow::anyhow!("保存失败: {e}"))?;
+            *ctx.channels.write().unwrap() = crate::channels::ChannelManager::from_config(&sample);
             colors::print_info(&format!("✓ 已生成示例 {} （全部 dry_run=true）", path.display()));
             colors::print_info("  1. 改 webhook_url + secret");
             colors::print_info("  2. /channels toggle <name>  取消 dry-run");

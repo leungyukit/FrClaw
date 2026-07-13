@@ -2,6 +2,33 @@
 
 > FrClaw 变更日志。从 Round 1 MVP 推到 Round 16（31 个特性 / 140 单测 / 0 warning），后改名 FrClaw。
 
+## v0.1.2 ─ /config 重构与模型配置挂起修复（2026-07-13）
+
+### 新增
+
+- `/config` 进入交互式配置菜单，支持：
+  - **模型**（model）── 向导式添加/配置 LLM provider
+  - **通道**（channel）── 向导式配置飞书/钉钉/企微/Webhook，保存后热重载
+  - **思考模式**（mode）── direct / CoT / ToT / ReAct / Plan
+  - **语言**（lang）── zh / en，自动重建 system prompt
+  - **自治模式**（autonomous）── 工具授权自动确认开关
+  - **单轮限制**（limit）── max_tokens 设置
+- 保留快捷入口：`/config model`、`/config channel`、`/config mode` 等。
+
+### 修复
+
+- 修复模型配置后「像死机」的挂起问题：
+  - Heartbeat、`/repl/command.rs`、`/repl/runner.rs` 中 `chain.read()` 不再跨 `.await` 持有。
+  - `OpenAiCompatProvider` 增加 15 秒连接超时，避免不可达 base_url 长时间挂起。
+  - `ChannelManager` 改为 `Arc<RwLock<...>>`，支持通道配置热重载。
+
+### 验证
+
+- `cargo build` 通过
+- `cargo test`：140/140 pass
+
+---
+
 ## Round 17 ─ 改名 fr-cli-rs → FrClaw（2026-07-12）
 
 ### 改动

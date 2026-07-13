@@ -45,7 +45,7 @@ pub struct AgentRunOptions {
     /// Round 14：Heartbeat 工具上下文（heartbeat_status / now / set）。
     pub heartbeat_tools: std::sync::Arc<crate::tools::HeartbeatToolContext>,
     /// Round 16：多通讯通道
-    pub channels: crate::channels::ChannelManager,
+    pub channels: std::sync::Arc<std::sync::RwLock<crate::channels::ChannelManager>>,
 }
 
 /// 一个 step 的执行结果（用于 step-by-step 渲染）
@@ -195,7 +195,7 @@ where
             let sandbox_clone = opts.sandbox.clone();
             let soul_clone = opts.soul.clone();
             let heartbeat_tools_clone = opts.heartbeat_tools.clone();
-            let channels_clone = opts.channels.clone();
+            let channels_snapshot = opts.channels.read().unwrap().clone();
             join_set.spawn(async move {
                 let start = Instant::now();
                 let res = if crate::tools::plan::is_plan_tool(&eff_name_for_spawn) {
@@ -229,7 +229,7 @@ where
                         Some(&soul_clone),
                         Some(&heartbeat_tools_clone),
                         Some(&mcp_clone),
-                        &channels_clone,
+                        &channels_snapshot,
                     ).await {
                         Ok(v) => v,
                         Err(e) => serde_json::json!({"error": format!("{e:#}")}),
