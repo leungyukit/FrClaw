@@ -1240,6 +1240,45 @@ fr> 帮我研究下当前目录下所有 .rs 文件并生成一份 module 概览
 # → AI 会先 enter_plan_mode 给出步骤，你审 y 后才执行
 ```
 
+## 切换 / 默认机制
+
+**FrClaw 不预设任何 provider**。首次启动若 `~/.fr_cli/models.yaml` 不存在，会生成空模板并提示：
+
+```
+⚠️  未配置任何 LLM provider；请先编辑 ~/.fr_cli/models.yaml
+   或执行 /model <alias> 切换。
+```
+
+启动后用以下任一方式配 model / provider：
+
+| 方式 | 命令 / 文件 | 说明 |
+|---|---|---|
+| **REPL 向导（推荐）** | `/config init` | 交互选 1-5：openai / deepseek / anthropic / moonshot / ollama；或 6 = 完全自定义 |
+| **临时切换当前 session** | `/model <alias>` | 不写盘，只改 `session.provider_alias`，下次启动回到 yaml 默认 |
+| **命令行覆盖** | `fr --model <alias>` | 一次性指定，仅当次生效 |
+| **直接编辑配置** | `~/.fr_cli/models.yaml` | 改 `default_provider` 字段永久生效 |
+
+**优先级**（高 → 低）：
+
+1. CLI 参数 `--model <alias>`（最高）
+2. 当前 session 已切换的 provider
+3. `models.yaml` 的 `settings.default_provider`
+4. 任意 provider 的 `is_default: true` 标记
+5. （都没有 → 启动期 print 警告，provider 列表为空，**不调用任何模型**）
+
+**当前内置 5 个 preset**（`/config init` 第 1-5 项）：
+
+| # | alias | 厂商 | base_url | env key |
+|---|---|---|---|---|
+| 1 | openai | OpenAI | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
+| 2 | deepseek | DeepSeek | `https://api.deepseek.com/v1` | `DEEPSEEK_API_KEY` |
+| 3 | anthropic | Anthropic Claude | `https://api.anthropic.com/v1` | `ANTHROPIC_API_KEY` |
+| 4 | moonshot | Moonshot Kimi | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` |
+| 5 | ollama | Ollama（本地） | `http://127.0.0.1:11434/v1` | （不需要 key） |
+| 6 | 自定义 | 你填 base_url / model / api_key_env | | |
+
+**降级链**：provider 配 `is_backup: true` 后，调用失败会自动切下一个；`/model` 不影响 backup 链。详情见 `src/llm/registry.rs`。
+
 ## 配置文件 `~/.fr_cli/models.yaml`
 
 ```yaml

@@ -48,6 +48,11 @@ pub fn hermes_db_path() -> PathBuf {
     data_dir().map(|d| d.join("tasks.db")).unwrap_or_else(|_| PathBuf::from("./tasks.db"))
 }
 
+/// Round 18 ─ Plan Engine 数据库路径（`~/.fr_cli/plans.db`）。
+pub fn plans_db_path() -> PathBuf {
+    data_dir().map(|d| d.join("plans.db")).unwrap_or_else(|_| PathBuf::from("./plans.db"))
+}
+
 fn ensure_dir(path: &Path) -> Result<()> {
     if !path.exists() {
         std::fs::create_dir_all(path)

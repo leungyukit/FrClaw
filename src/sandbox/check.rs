@@ -96,7 +96,6 @@ mod tests {
     use super::*;
     use crate::sandbox::policy::SandboxPolicy;
     use std::fs;
-    use tempfile::TempDir;
 
     #[test]
     fn disabled_policy_allows_everything() {

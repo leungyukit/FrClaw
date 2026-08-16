@@ -68,6 +68,7 @@ pub async fn dispatch(line: &str, ctx: &AppContext) -> Result<CmdOutcome> {
         "channels" | "ch" => commands::channels_cmd(ctx, &rest_args).await,
         "timeline" | "tl" => commands::timeline_cmd(ctx, &rest_args).await,
         "voice" | "v" => commands::voice_cmd(ctx, &rest_args).await,
+        "plan" => commands::plan_cmd(ctx, &rest_args).await,
         "shell" | "sh" | "!" => commands::shell(ctx, &rest_args).await,
         "read" => commands::read(ctx, &rest_args).await,
         "write" => commands::write(ctx, &rest_args).await,

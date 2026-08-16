@@ -178,7 +178,6 @@ fn split_by_h2(text: &str) -> Vec<(String, String)> {
 mod tests {
     use super::*;
     use std::fs;
-    use tempfile::TempDir;
 
     #[test]
     fn empty_load() {

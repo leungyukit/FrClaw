@@ -3215,7 +3215,7 @@ pub async fn channels_cmd(ctx: &AppContext, args: &[&str]) -> Result<CmdOutcome>
                     },
                 ],
             };
-            sample.save().map_err(|e| anyhow::anyhow!("保存失败: {e}"))?;
+            sample.save().map_err(|e| anyhow::anyhow!("保存失败: {}", e))?;
             *ctx.channels.write().unwrap() = crate::channels::ChannelManager::from_config(&sample);
             colors::print_info(&format!("✓ 已生成示例 {} （全部 dry_run=true）", path.display()));
             colors::print_info("  1. 改 webhook_url + secret");
@@ -3491,4 +3491,171 @@ pub async fn voice_cmd(ctx: &AppContext, args: &[&str]) -> Result<CmdOutcome> {
         }
     }
     Ok(CmdOutcome::Continue)
+}
+
+// ─── Round 18 ─ Plan Engine（自主规划多计划执行）──────────────────
+
+pub async fn plan_cmd(ctx: &AppContext, args: &[&str]) -> Result<CmdOutcome> {
+    use crate::plan::{Goal, PlanEngine, PlanStore};
+
+    let sub = args.first().copied().unwrap_or("help");
+    match sub {
+        "start" | "go" => {
+            // /plan start <goal...> [--ctx <context>]
+            if args.len() < 2 {
+                colors::print_error("用法: /plan start <goal...> [--ctx <context>]");
+                return Ok(CmdOutcome::Continue);
+            }
+            let mut ctx_text: Option<String> = None;
+            let mut text_parts: Vec<&str> = Vec::new();
+            for a in &args[1..] {
+                if let Some(c) = a.strip_prefix("--ctx=") {
+                    ctx_text = Some(c.to_string());
+                } else if let Some(c) = a.strip_prefix("--ctx ") {
+                    ctx_text = Some(c.to_string());
+                } else {
+                    text_parts.push(a);
+                }
+            }
+            let description = text_parts.join(" ");
+            if description.is_empty() {
+                colors::print_error("goal 不能为空");
+                return Ok(CmdOutcome::Continue);
+            }
+            let goal = Goal::new(description.clone());
+            let goal = if let Some(c) = ctx_text { goal.context(c) } else { goal };
+            let store = Arc::new(PlanStore::open(plan_db_path()).unwrap_or_else(|_| PlanStore::open_in_memory().unwrap()));
+            let engine = PlanEngine::new(store, Arc::new(ctx.chain.read().unwrap().clone()), ctx.session.lock().unwrap().provider_alias.clone());
+            colors::print_info(&format!("🔧 正在让 LLM 拆解 goal: \"{description}\""));
+            match engine.start(goal).await {
+                Ok(id) => {
+                    println!();
+                    colors::print_info(&format!("✓ Plan #{id} 已创建"));
+                    // 自动跑
+                    colors::print_info("⚙️  开始执行（按 DAG 并发调度 + 自愈）...");
+                    println!();
+                    match engine.run_plan(id).await {
+                        Ok(s) => {
+                            println!();
+                            colors::print_info(&format!("📊 总结: {}", s.summary));
+                            match s.status {
+                                crate::plan::PlanStatus::Completed => {
+                                    colors::print_info("✅ 全部完成");
+                                }
+                                crate::plan::PlanStatus::Failed => {
+                                    colors::print_error("⚠️  有节点需要人工介入（已升级到 needs_human）");
+                                }
+                                _ => {
+                                    colors::print_info(&format!("状态: {}", s.status.as_str()));
+                                }
+                            }
+                        }
+                        Err(e) => colors::print_error(&format!("run_plan 失败: {e:#}")),
+                    }
+                }
+                Err(e) => colors::print_error(&format!("拆解失败: {e:#}\n  提示: LLM 没返回有效 JSON（看 stderr 看 raw 输出）")),
+            }
+        }
+        "list" | "ls" => {
+            let store = PlanStore::open(plan_db_path()).unwrap_or_else(|_| PlanStore::open_in_memory().unwrap());
+            let plans = store.list().unwrap_or_default();
+            if plans.is_empty() {
+                colors::print_info("(无 plan)");
+            } else {
+                println!();
+                println!("Plans ({} 个):", plans.len());
+                for p in plans {
+                    println!("  #{:>4}  {:<10}  {}", p.id, p.status.as_str(), p.name);
+                    println!("         goal: {}", p.goal);
+                }
+                println!();
+            }
+        }
+        "show" => {
+            if args.len() < 2 {
+                colors::print_error("用法: /plan show <id>");
+                return Ok(CmdOutcome::Continue);
+            }
+            let id: i64 = match args[1].parse() {
+                Ok(n) => n,
+                Err(_) => {
+                    colors::print_error("id 必须是整数");
+                    return Ok(CmdOutcome::Continue);
+                }
+            };
+            let store = PlanStore::open(plan_db_path()).unwrap_or_else(|_| PlanStore::open_in_memory().unwrap());
+            match store.get(id) {
+                Ok(Some(dag)) => {
+                    println!();
+                    println!("Plan #{} — {}", dag.id, dag.name);
+                    println!("  goal:   {}", dag.goal);
+                    println!("  status: {}", dag.status.as_str());
+                    println!();
+                    for n in &dag.nodes {
+                        println!("  • {:<20}  {:<12}  retries={}  runs={}", n.id, n.status.as_str(), n.retry_count, n.runs.len());
+                        if let Some(last) = n.runs.last() {
+                            let preview = last.output.as_deref().unwrap_or("").chars().take(60).collect::<String>();
+                            if !preview.is_empty() {
+                                println!("      └─ output: {}{}", preview, if last.output.as_deref().unwrap_or("").chars().count() > 60 { "…" } else { "" });
+                            }
+                            if let Some(e) = &last.error {
+                                let ep = e.chars().take(80).collect::<String>();
+                                println!("      └─ error:  {ep}{}", if e.chars().count() > 80 { "…" } else { "" });
+                            }
+                        }
+                    }
+                    if !dag.edges.is_empty() {
+                        println!();
+                        println!("  edges:");
+                        for e in &dag.edges {
+                            println!("    {} → {}", e.from, e.to);
+                        }
+                    }
+                    println!();
+                }
+                Ok(None) => colors::print_error(&format!("plan #{id} 不存在")),
+                Err(e) => colors::print_error(&format!("读 plan 失败: {e:#}")),
+            }
+        }
+        "delete" | "rm" => {
+            if args.len() < 2 {
+                colors::print_error("用法: /plan delete <id>");
+                return Ok(CmdOutcome::Continue);
+            }
+            let id: i64 = match args[1].parse() {
+                Ok(n) => n,
+                Err(_) => {
+                    colors::print_error("id 必须是整数");
+                    return Ok(CmdOutcome::Continue);
+                }
+            };
+            let store = PlanStore::open(plan_db_path()).unwrap_or_else(|_| PlanStore::open_in_memory().unwrap());
+            match store.delete(id) {
+                Ok(()) => colors::print_info(&format!("✓ 删除 plan #{id}")),
+                Err(e) => colors::print_error(&format!("删除失败: {e:#}")),
+            }
+        }
+        "help" | "-h" | _ => {
+            println!();
+            println!("Plan Engine 命令（Round 18 ─ 自主规划多计划执行）:");
+            println!();
+            println!("  /plan start <goal...> [--ctx <上下文>]");
+            println!("                                LLM 拆 goal → DAG → 并发跑 + 自愈");
+            println!("  /plan list                    列出所有 plan");
+            println!("  /plan show <id>               看 plan 详情（每个 node 状态 / 输出）");
+            println!("  /plan delete <id>             删 plan");
+            println!();
+            println!("自愈策略（按 retry_count 升级）:");
+            println!("  0→1 重试原 prompt（LLM 偶发不稳）");
+            println!("  1→2 mutate prompt + hint");
+            println!("  2→3 限工具子集（关 web_search / shell）");
+            println!("  3+ 升级 needs_human（停止自动跑，挂起等你）");
+            println!();
+        }
+    }
+    Ok(CmdOutcome::Continue)
+}
+
+fn plan_db_path() -> std::path::PathBuf {
+    crate::config::paths::plans_db_path()
 }

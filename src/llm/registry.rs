@@ -22,11 +22,17 @@ pub fn build_provider(alias: &str, cfg: &ProviderConfig) -> Result<Arc<dyn LlmPr
 }
 
 /// 降级链：默认 provider 失败时，自动切到 backup。
+#[derive(Clone)]
 pub struct FallbackChain {
     providers: Vec<(String, Arc<dyn LlmProvider>)>,
 }
 
 impl FallbackChain {
+    /// 空 chain（测试用）
+    pub fn new() -> Self {
+        Self { providers: Vec::new() }
+    }
+
     pub fn from_models(models: &ModelsFile) -> Result<Self> {
         let mut providers = Vec::new();
         if let Some(name) = models.default_provider_name() {

@@ -65,13 +65,6 @@ const PRESETS: &[ProviderPreset] = &[
         models: &["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
     },
     ProviderPreset {
-        alias: "zhipu",
-        name: "智谱 GLM",
-        base_url: "https://open.bigmodel.cn/api/paas/v4",
-        api_key_env: "ZHIPU_API_KEY",
-        models: &["glm-4-flash", "glm-4", "glm-4v", "glm-4-air"],
-    },
-    ProviderPreset {
         alias: "ollama",
         name: "Ollama (本地)",
         base_url: "http://127.0.0.1:11434/v1",

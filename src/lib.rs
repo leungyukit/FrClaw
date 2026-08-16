@@ -19,6 +19,7 @@
 //! - `hermes` —— Round 12 后台任务引擎（持久队列 + cron）
 //! - `soul` —— Round 13 SOUL.md 持久身份（多源合并 + 注入 system）
 //! - `heartbeat` —— Round 14 主动唤醒（按 SOUL 的 heartbeat 段定时跑）
+//! - `plan` —— Round 18 自主规划多计划执行（目标→DAG→并发执行+自愈）
 //! - `error` —— 统一错误类型
 
 pub mod agent;
@@ -34,6 +35,7 @@ pub mod hooks;
 pub mod llm;
 pub mod mcp;
 pub mod memory;
+pub mod plan;
 pub mod rag;
 pub mod repl;
 pub mod sandbox;

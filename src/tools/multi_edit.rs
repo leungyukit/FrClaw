@@ -324,7 +324,6 @@ pub fn parse_edit_op_from_args(rest: &str) -> Result<EditOp> {
 mod tests {
     use super::*;
     use std::fs;
-    use tempfile::TempDir;
 
     fn write(p: &Path, c: &str) {
         if let Some(parent) = p.parent() {
