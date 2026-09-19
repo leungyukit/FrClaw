@@ -19,14 +19,24 @@ use std::time::Duration;
 pub struct OpenAiCompatProvider {
     cfg: ProviderConfig,
     alias: String,
-    api_key: Option<String>,
+    api_key: String,
     client: Client,
 }
 
 impl OpenAiCompatProvider {
     pub fn new(alias: impl Into<String>, cfg: ProviderConfig) -> Result<Self> {
         let alias = alias.into();
-        let api_key = keys::resolve(cfg.api_key_env.as_deref(), &alias);
+        let api_key = cfg
+            .api_key
+            .clone()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| keys::resolve(cfg.api_key_env.as_deref(), &alias))
+            .ok_or_else(|| {
+                Error::Other(format!(
+                    "provider `{alias}` 没找到 API key：请设置 `api_key:` 字段或环境变量 `{}`",
+                    cfg.api_key_env.as_deref().unwrap_or("(none)")
+                ))
+            })?;
         let client = ClientBuilder::new()
             .connect_timeout(Duration::from_secs(15))
             .timeout(Duration::from_secs(180))
@@ -50,7 +60,7 @@ impl LlmProvider for OpenAiCompatProvider {
         &self.cfg.model
     }
     fn has_api_key(&self) -> bool {
-        self.api_key.is_some()
+        !self.api_key.is_empty()
     }
     fn config(&self) -> &ProviderConfig {
         &self.cfg
@@ -58,10 +68,11 @@ impl LlmProvider for OpenAiCompatProvider {
 
     async fn chat_stream(&self, req: CompletionRequest) -> anyhow::Result<TextStream> {
         // 真正的 SSE 路径
-        let api_key = self
-            .api_key
-            .clone()
-            .ok_or_else(|| anyhow::anyhow!(Error::MissingApiKey(self.alias.clone())))?;
+        let api_key = if self.api_key.is_empty() {
+            return Err(anyhow::anyhow!(Error::MissingApiKey(self.alias.clone())));
+        } else {
+            self.api_key.clone()
+        };
 
         let url = format!(
             "{}/chat/completions",
@@ -110,9 +121,10 @@ impl LlmProvider for OpenAiCompatProvider {
                 };
                 buf.extend_from_slice(&bytes);
                 // 把 buffer 切成 SSE 行，每行尝试解析。
-                while let Some(line_range) = next_sse_line(&buf) {
-                    let line_bytes = buf[line_range.clone()].to_vec();
-                    buf.drain(..line_range.end);
+                while let Some((line_range, consumed)) = next_sse_line(&buf) {
+                    let line_bytes = buf[line_range].to_vec();
+                    // 必须连换行符一起消费掉，否则残留的 "\n" 会让循环空转死循环
+                    buf.drain(..consumed);
                     let line = std::str::from_utf8(&line_bytes).unwrap_or("");
                     if let Some(rest) = line.strip_prefix("data:") {
                         let rest = rest.trim();
@@ -184,12 +196,13 @@ impl LlmProvider for OpenAiCompatProvider {
 // ----------------- SSE line splitter -----------------
 
 /// 在 buffer 中找下一条完整 SSE 行（以 `\n` 或 `\r\n` 结尾）。
-/// 返回 `[start, end)`（end 是换行字符的 index）。
-fn next_sse_line(buf: &[u8]) -> Option<std::ops::Range<usize>> {
+/// 返回 `(内容范围, 消费长度)`：内容范围不含行尾换行符；消费长度包含换行符，
+/// 用于从 buffer 中把整行（含换行）移除。
+fn next_sse_line(buf: &[u8]) -> Option<(std::ops::Range<usize>, usize)> {
     for (i, b) in buf.iter().enumerate() {
         if *b == b'\n' {
             let line_end = if i > 0 && buf[i - 1] == b'\r' { i - 1 } else { i };
-            return Some(0..line_end);
+            return Some((0..line_end, i + 1));
         }
     }
     None
@@ -418,5 +431,50 @@ fn role_str(role: crate::llm::message::Role) -> &'static str {
         Role::User => "user",
         Role::Assistant => "assistant",
         Role::Tool => "tool",
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::next_sse_line;
+
+    #[test]
+    fn sse_line_lf_and_crlf_fully_consumed() {
+        // \n 结尾：内容与消费长度都不含歧义
+        let (range, consumed) = next_sse_line(b"data: x\nrest").unwrap();
+        assert_eq!(&b"data: x"[..], &b"data: x"[range]);
+        assert_eq!(consumed, 8); // 连 \n 一起消费
+
+        // \r\n 结尾：内容不含 \r\n，消费长度包含二者
+        let (range, consumed) = next_sse_line(b"data: y\r\nrest").unwrap();
+        assert_eq!(&b"data: y"[..], &b"data: y\r\nrest"[range]);
+        assert_eq!(consumed, 9);
+    }
+
+    #[test]
+    fn sse_line_consumption_never_retargets_same_bytes() {
+        // 模拟流式解析循环：逐行消费后 buffer 必须被削空，
+        // 否则残留换行符会导致死循环（历史 bug）。
+        let chunk = b"data: {\"a\":1}\n\ndata: [DONE]\n";
+        let mut buf: Vec<u8> = Vec::new();
+        buf.extend_from_slice(chunk);
+        let mut lines = 0;
+        let mut guard = 0;
+        while let Some((range, consumed)) = next_sse_line(&buf) {
+            let _line = buf[range].to_vec();
+            buf.drain(..consumed);
+            lines += 1;
+            guard += 1;
+            assert!(guard <= 4, "疑似死循环：消费没有推进");
+        }
+        assert!(buf.is_empty());
+        assert_eq!(lines, 3); // 两行 data: + 一个空行
+    }
+
+    #[test]
+    fn sse_line_incomplete_returns_none() {
+        assert!(next_sse_line(b"data: no newline yet").is_none());
+        assert!(next_sse_line(b"").is_none());
     }
 }

@@ -293,14 +293,27 @@ pub async fn model(ctx: &AppContext, args: &[&str]) -> Result<CmdOutcome> {
     }
 
     let alias = args[0].to_string();
-    if !models.providers.contains_key(&alias) {
-        colors::print_error(&format!("未知 provider: {alias}"));
-        return Ok(CmdOutcome::Continue);
-    }
-
+    let cfg = match models.providers.get(&alias) {
+        Some(c) => c.clone(),
+        None => {
+            colors::print_error(&format!("未知 provider: {alias}"));
+            return Ok(CmdOutcome::Continue);
+        }
+    };
     drop(models);
-    ctx.session.lock().unwrap().provider_alias = alias.clone();
-    colors::print_info(&format!("已切换到 `{alias}`"));
+
+    // 热更新：立即构建新 provider 并注入降级链，
+    // 否则链里只有启动时的 default/backup，请求仍会发给旧 provider。
+    match crate::llm::registry::build_provider(&alias, &cfg) {
+        Ok(p) => {
+            ctx.chain.write().unwrap().upsert(alias.clone(), p);
+            ctx.session.lock().unwrap().provider_alias = alias.clone();
+            colors::print_info(&format!("已切换到 `{alias}`"));
+        }
+        Err(e) => {
+            colors::print_error(&format!("切换失败：{e}"));
+        }
+    }
     Ok(CmdOutcome::Continue)
 }
 
@@ -318,6 +331,18 @@ pub async fn key(_ctx: &AppContext, args: &[&str]) -> Result<CmdOutcome> {
     let key = args[1..].join(" ");
     crate::config::keys::set_key(alias, &key)?;
     colors::print_info(&format!("已为 `{alias}` 保存 key (写入 ~/.fr_cli/keys.json)"));
+
+    // key 在 provider 构建时快照，这里重建并注入降级链使其立即生效
+    let cfg = _ctx.models.lock().unwrap().providers.get(alias).cloned();
+    if let Some(cfg) = cfg {
+        match crate::llm::registry::build_provider(alias, &cfg) {
+            Ok(p) => {
+                _ctx.chain.write().unwrap().upsert(alias.to_string(), p);
+                colors::print_info(&format!("已热更新 provider `{alias}`"));
+            }
+            Err(e) => colors::print_error(&format!("热更新 provider 失败：{e}")),
+        }
+    }
     Ok(CmdOutcome::Continue)
 }
 

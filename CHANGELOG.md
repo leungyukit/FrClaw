@@ -2,6 +2,29 @@
 
 > FrClaw 变更日志。从 Round 1 MVP 推到 Round 16（31 个特性 / 140 单测 / 0 warning），后改名 FrClaw。
 
+## v0.2.0 ─ 流式输出与稳定性修复（2026-09-19）
+
+### 新增
+
+- **真实流式输出**：`run_agent_step_loop` 改为消费 `chat_stream`，每个 delta 立即上报事件；REPL 经 `MarkdownStream` 逐行增量渲染，Web 控制台按 `delta` SSE 推送
+- **等待加载符**：新增 `ui::spinner`，等待首个 token 时显示旋转动画（stderr 输出、不污染正文、非 TTY 自动关闭、Drop 兜底清行）
+- **provider 明文凭据**：`ProviderConfig` 新增 `api_key` 字段（优先级低于 `api_key_env`），缺 key 时在构建期明确报错
+
+### 修复
+
+- **SSE 解析死循环**（所有 LLM 请求必现）：按行切分时未消费换行符，残留 `\n` 导致 100% CPU 空转、`chat_stream` 永不返回
+- **模型切换不生效**：`/model` 只改字符串、降级链缓存不重建，请求仍发给旧 provider；切换时现在构建新 provider 并热注入 `FallbackChain`（`/key` 同步热更新）
+- **长会话压缩死循环**：二次压缩遇到已插入的摘要 system 消息时 `continue` 未推进索引
+- **流式渲染 panic**：增量 diff 用旧渲染字节长度切新字符串，CJK 多字节字符边界处 panic；改为最长公共前缀（字符边界安全）；单行强制 flush 截断点同样推进到字符边界
+- **回复重复输出**：流式内容已逐行渲染，结尾不再整体重打
+
+### 验证
+
+- `cargo test`：162/162 pass（含 SSE 切分、压缩回归、spinner、字符边界新增测试）
+- 真实 API 端到端：volcengine / deepseek 流式对话、中文 markdown、模型切换
+
+---
+
 ## v0.1.2 ─ /config 重构与模型配置挂起修复（2026-07-13）
 
 ### 新增

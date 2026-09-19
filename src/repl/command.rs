@@ -333,11 +333,19 @@ pub async fn handle_user_input(text: &str, ctx: &AppContext) -> Result<()> {
 
     {
         let provider: Arc<dyn crate::llm::provider::LlmProvider> = primary;
+        // 等待首个 token 时的加载符；拿到 delta / 工具调用 / 工具结果即停。
+        // Drop 兜底：出错也会清掉残行。
+        let mut spinner = Some(crate::ui::spinner::Spinner::start("正在等待大模型响应…"));
         let result = run_agent_step_loop(
             provider,
             opts,
             |step| match step {
                 AgentStep::LlmReply { content, tool_calls, tokens } => {
+                    if (!content.is_empty() || !tool_calls.is_empty()) && spinner.is_some() {
+                        if let Some(mut sp) = spinner.take() {
+                            sp.stop();
+                        }
+                    }
                     if !content.is_empty() {
                         // Round 10 ─ 流式 markdown 渲染
                         md_stream.add(&content);
@@ -365,6 +373,9 @@ pub async fn handle_user_input(text: &str, ctx: &AppContext) -> Result<()> {
                     }
                 }
                 AgentStep::ToolExecuted { name, elapsed_ms, result, .. } => {
+                    if let Some(mut sp) = spinner.take() {
+                        sp.stop();
+                    }
                     colors::print_info(&format!(
                         "  ✓ `{name}` 完成 ({}ms)",
                         elapsed_ms
@@ -400,7 +411,10 @@ pub async fn handle_user_input(text: &str, ctx: &AppContext) -> Result<()> {
         final_text = "(agent 未返回文本内容)".into();
     }
 
-    crate::ui::colors::print_assistant(&final_text);
+    // 流式已经逐行渲染过正文，这里只补打未流式的情况，避免重复输出
+    if !saw_stream {
+        crate::ui::colors::print_assistant(&final_text);
+    }
 
     // 7) 写回 session + 落盘
     {

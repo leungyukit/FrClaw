@@ -27,7 +27,11 @@ pub fn maybe_compact(session: &mut ChatSession, threshold: usize, compact_count:
     while i + compact_count < session.messages.len() - 1 && taken < compact_count {
         let m = &session.messages[i];
         let role = match m.role {
-            crate::llm::message::Role::System => continue,
+            // 跳过 system 消息（如已插入的摘要段），但必须推进 i，否则会死循环
+            crate::llm::message::Role::System => {
+                i += 1;
+                continue;
+            }
             crate::llm::message::Role::User => "user",
             crate::llm::message::Role::Assistant => "assistant",
             crate::llm::message::Role::Tool => "tool",
@@ -114,6 +118,27 @@ mod tests {
         assert!(s.messages.len() < original_len);
         // 早期对话应被压成一条 system summary
         assert!(s.messages.iter().any(|m| matches!(m.role, Role::System) && m.content.contains("摘要")));
+    }
+
+    #[test]
+    fn compact_again_with_existing_summary_terminates() {
+        // 第一次压缩后 messages[1] 会变成 system（摘要段）；
+        // 再次压缩时必须跳过它而不是死循环。
+        let mut s = build_long_session(60);
+        maybe_compact(&mut s, 32, 16);
+        assert!(matches!(s.messages[1].role, Role::System));
+        // 模拟后续对话，让消息数再次超过阈值
+        for i in 0..20 {
+            s.messages.push(Message::user(format!("more#{i}")));
+            s.messages.push(Message::assistant(format!("resp#{i}")));
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            maybe_compact(&mut s, 32, 16);
+            tx.send(()).unwrap();
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(5))
+            .expect("maybe_compact 死循环");
     }
 
     #[test]

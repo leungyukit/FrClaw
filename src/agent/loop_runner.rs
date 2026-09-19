@@ -105,12 +105,50 @@ where
         };
 
         // 调用 LLM（带降级 chain 由调用方在外面处理；这里只对单一 provider 调）
-        let resp = provider.chat(req).await?;
+        // 流式消费：每个 delta 立即上报，调用方（REPL / Web）实时渲染；
+        // 流结束后再补发一条带 tool_calls / tokens 的汇总事件。
+        let mut stream = provider.chat_stream(req).await?;
+        let mut acc_content = String::new();
+        let resp: CompletionResponse = {
+            use futures_util::StreamExt;
+            let mut last_done: Option<CompletionResponse> = None;
+            while let Some(ev) = stream.next().await {
+                match ev? {
+                    crate::llm::provider::StreamEvent::Delta(delta) => {
+                        if !delta.is_empty() {
+                            acc_content.push_str(&delta);
+                            on_event(&AgentStep::LlmReply {
+                                content: delta,
+                                tool_calls: vec![],
+                                tokens: (None, None),
+                            });
+                        }
+                    }
+                    crate::llm::provider::StreamEvent::Done(r) => last_done = Some(r),
+                }
+            }
+            match last_done {
+                Some(mut r) => {
+                    if r.content.is_empty() {
+                        r.content = acc_content.clone();
+                    }
+                    r
+                }
+                None => CompletionResponse {
+                    content: acc_content.clone(),
+                    tool_calls: vec![],
+                    prompt_tokens: None,
+                    completion_tokens: None,
+                    finish_reason: Some("stop".into()),
+                },
+            }
+        };
         prompt_tokens_total = prompt_tokens_total.saturating_add(resp.prompt_tokens.unwrap_or(0));
         completion_tokens_total = completion_tokens_total.saturating_add(resp.completion_tokens.unwrap_or(0));
 
+        // 汇总事件：tool_calls / token 统计（content 已由 delta 流式上报，留空避免重复渲染）
         on_event(&AgentStep::LlmReply {
-            content: resp.content.clone(),
+            content: String::new(),
             tool_calls: resp.tool_calls.clone(),
             tokens: (resp.prompt_tokens, resp.completion_tokens),
         });

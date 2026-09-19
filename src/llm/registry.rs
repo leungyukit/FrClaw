@@ -39,15 +39,22 @@ impl FallbackChain {
             if let Some(cfg) = models.get(&name) {
                 match build_provider(&name, cfg) {
                     Ok(p) => providers.push((name, p)),
-                    Err(_) => {} // 配置问题不阻塞启动
+                    Err(e) => {
+                        eprintln!("⚠️  [provider:{name}] build 失败: {e}");
+                    }
                 }
+            } else {
+                eprintln!("⚠️  default_provider `{name}` 不在 models.yaml 的 providers 段里");
             }
+        } else {
+            eprintln!("⚠️  models.yaml 没有设置 default_provider");
         }
         if let Some(name) = models.backup_provider_name() {
             if providers.iter().all(|(n, _)| n != &name) {
                 if let Some(cfg) = models.get(&name) {
-                    if let Ok(p) = build_provider(&name, cfg) {
-                        providers.push((name, p));
+                    match build_provider(&name, cfg) {
+                        Ok(p) => providers.push((name, p)),
+                        Err(e) => eprintln!("⚠️  [backup:{name}] build 失败: {e}"),
                     }
                 }
             }
@@ -65,6 +72,15 @@ impl FallbackChain {
 
     pub fn providers(&self) -> &[(String, Arc<dyn LlmProvider>)] {
         &self.providers
+    }
+
+    /// 插入或替换某个 alias 的 provider（/model 切换时热更新，避免重启才生效）。
+    pub fn upsert(&mut self, alias: String, provider: Arc<dyn LlmProvider>) {
+        if let Some(slot) = self.providers.iter_mut().find(|(n, _)| *n == alias) {
+            slot.1 = provider;
+        } else {
+            self.providers.push((alias, provider));
+        }
     }
 
     /// 按 alias 查 provider，找不到返回 None。

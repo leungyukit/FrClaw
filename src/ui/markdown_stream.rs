@@ -74,7 +74,13 @@ impl MarkdownStream {
                 // utf-8 字符边界
                 char_count += 1;
                 if char_count >= self.force_flush_at {
-                    newline_pos = Some(i);
+                    // i 可能落在多字节字符（CJK）中间，
+                    // 推进到完整字符结束处，保证 accumulated[..=end] 可安全切片
+                    let mut end = i;
+                    while end + 1 < bytes.len() && !self.accumulated.is_char_boundary(end + 1) {
+                        end += 1;
+                    }
+                    newline_pos = Some(end);
                     break;
                 }
                 i += 1;
@@ -116,9 +122,13 @@ impl MarkdownStream {
         // 截取 accumulated[0..=real_end] 整段过 render，跟 last_rendered 比 diff
         let prefix = &self.accumulated[..=real_end];
         let new_rendered = md::render(prefix);
-        // 增量：新渲染字符串里比 last_rendered 多的部分
+        // 增量：新渲染字符串里比 last_rendered 多的部分。
+        // 不能直接用 last_rendered.len() 切——render 会因 markdown 状态变化
+        // （如不完整的 **bold**）改写 earlier 字节，旧长度可能落在多字节字符
+        // 中间（CJK 直接 panic）。取最长公共前缀（字符边界安全）。
         if new_rendered.len() > self.last_rendered.len() {
-            let diff = &new_rendered[self.last_rendered.len()..];
+            let keep = common_prefix_len(&self.last_rendered, &new_rendered);
+            let diff = &new_rendered[keep..];
             let stdout = std::io::stdout();
             let mut h = stdout.lock();
             let _ = h.write_all(diff.as_bytes());
@@ -132,6 +142,22 @@ impl Default for MarkdownStream {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// 两个渲染结果的最长公共前缀长度（按字节比较；若落在中途非字符边界，
+/// 回退到 `new` 中最近的前一个字符边界，保证可以安全切片）。
+fn common_prefix_len(prev: &str, new: &str) -> usize {
+    let pb = prev.as_bytes();
+    let nb = new.as_bytes();
+    let max = pb.len().min(nb.len());
+    let mut i = 0;
+    while i < max && pb[i] == nb[i] {
+        i += 1;
+    }
+    while i > 0 && !new.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
 }
 
 #[cfg(test)]
@@ -198,6 +224,29 @@ mod tests {
         s.add("```\ncode block\n```\n");
         s.finish();
         // 不验证具体内容（ANSI vs 非 ANSI）；只验证不 panic
+    }
+
+    #[test]
+    fn common_prefix_respects_char_boundaries() {
+        // 旧渲染以 ASCII 结尾，新渲染在同一位置换成 CJK——旧 byte 长度会切开新字符
+        assert_eq!(common_prefix_len("ab", "a我b"), 1);
+        // 纯前缀关系：完整保留
+        assert_eq!(common_prefix_len("\x1b[93mx", "\x1b[93m你好"), 5);
+        // 空 prev：全部输出
+        assert_eq!(common_prefix_len("", "你好世界"), 0);
+        // 完全相同
+        assert_eq!(common_prefix_len("abc", "abc"), 3);
+    }
+
+    #[test]
+    fn chinese_text_with_markdown_rewrite_no_panic() {
+        // 模拟真实场景：未闭合 ** 触发 render 改写，后续接 CJK 文本
+        let mut s = MarkdownStream::new();
+        s.add("**你好");
+        s.add("世界**\n");
+        s.add("普通中文行，不含 markdown\n");
+        s.add("- 列表项**加粗**\n");
+        s.finish();
     }
 
     // 颜色已禁用时，纯逻辑验证

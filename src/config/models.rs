@@ -43,6 +43,9 @@ pub struct ProviderConfig {
     /// 协议类型：`openai` / `anthropic`（当前只实现 `openai`）
     pub protocol: String,
     pub base_url: String,
+    /// 明文 API key（优先级低于 `api_key_env`）
+    #[serde(default)]
+    pub api_key: Option<String>,
     /// 用于获取 API key 的环境变量名（如 `OPENAI_API_KEY`）
     #[serde(default)]
     pub api_key_env: Option<String>,

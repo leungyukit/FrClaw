@@ -4,8 +4,10 @@
 //! - [`banner`] —— 启动 banner 与分隔线
 //! - [`markdown`] —— 极简 markdown 渲染（heading/code/list）
 //! - [`markdown_stream`] —— Round 10 增量流式 markdown 渲染（行级 flush）
+//! - [`spinner`] —— 等待 LLM 响应的 stderr 加载符
 
 pub mod banner;
 pub mod colors;
 pub mod markdown;
 pub mod markdown_stream;
+pub mod spinner;

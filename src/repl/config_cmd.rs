@@ -250,6 +250,7 @@ async fn configure_model(ctx: &AppContext) -> Result<CmdOutcome> {
                 model,
                 protocol: "openai".to_string(),
                 base_url,
+                api_key: None,
                 api_key_env,
                 max_tokens: Some(8192),
                 temperature: Some(0.7),
