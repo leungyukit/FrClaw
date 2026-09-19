@@ -37,9 +37,15 @@ impl OpenAiCompatProvider {
                     cfg.api_key_env.as_deref().unwrap_or("(none)")
                 ))
             })?;
+        // 总超时只作安全网（流式生成可能持续数分钟，不能被总时长掐断）；
+        // 真正的卡住检测放在流内空闲超时（见 chat_stream）。
+        let timeout_secs: u64 = std::env::var("FR_LLM_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1800);
         let client = ClientBuilder::new()
             .connect_timeout(Duration::from_secs(15))
-            .timeout(Duration::from_secs(180))
+            .timeout(Duration::from_secs(timeout_secs))
             .build()
             .map_err(|e| Error::Other(format!("build http client: {e}")))?;
         Ok(Self {
@@ -111,13 +117,34 @@ impl LlmProvider for OpenAiCompatProvider {
             let mut buf: Vec<u8> = Vec::new();
             let mut seen_done = false;
             futures_util::pin_mut!(byte_stream);
-            while let Some(item) = byte_stream.next().await {
+            // 空闲超时：相邻数据块间隔超过该值才算卡死（推理模型长时间
+            // 持续吐 token 的流不受影响）。可用 FR_LLM_IDLE_TIMEOUT_SECS 覆盖。
+            let idle_secs: u64 = std::env::var("FR_LLM_IDLE_TIMEOUT_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(120);
+            loop {
+                let item = match tokio::time::timeout(
+                    Duration::from_secs(idle_secs),
+                    byte_stream.next(),
+                )
+                .await
+                {
+                    Ok(item) => item,
+                    Err(_) => {
+                        yield Err(anyhow::anyhow!(Error::Other(format!(
+                            "provider `{alias}` 流式响应超时（{idle_secs}s 无数据），请检查网络或模型服务"
+                        ))));
+                        return;
+                    }
+                };
                 let bytes = match item {
-                    Ok(b) => b,
-                    Err(e) => {
+                    Some(Ok(b)) => b,
+                    Some(Err(e)) => {
                         yield Err(anyhow::anyhow!(Error::Http(e)));
                         return;
                     }
+                    None => break,
                 };
                 buf.extend_from_slice(&bytes);
                 // 把 buffer 切成 SSE 行，每行尝试解析。

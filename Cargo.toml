@@ -1,6 +1,6 @@
 [package]
 name = "fr-claw"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "FrClaw —— 终端 AI 助手 / AI 编程伙伴（Rust 重写自 fr-cli，对标 OpenClaw 生态）"
 license = "MIT"
