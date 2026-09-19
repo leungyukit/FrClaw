@@ -36,3 +36,7 @@ desktop.ini
 
 # 大文件 / 二进制
 *.bin
+
+# 用户工作产物（frClaw agent 生成）
+*.xlsx
+make_shopee_sheet.py
